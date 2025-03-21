@@ -1,5 +1,6 @@
 import networkx as nx
 from matplotlib import pyplot as plt
+from itertools import combinations
 class DeBruijnGraph:
     def __init__(self, sequences, k, allow_gaps=False, kmer_mismatch_length=None):
         """
@@ -27,6 +28,8 @@ class DeBruijnGraph:
         Returns:
         - graph: The NetworkX DiGraph object representing the De Bruijn graph.
         """
+        print(self.allow_gaps)
+        print(self.kmer_mismatch_length)
         for seq_index, dna_sequence in enumerate(self.sequences):
             for i in range(len(dna_sequence) - self.k + 1):
                 k_mer_start = dna_sequence[i:i + self.k - 1]
@@ -88,9 +91,18 @@ class DeBruijnGraph:
         Returns:
         - list: A list of masked k-mers.
         """
-        # Simple placeholder for masked k-mers generation.
-        # In practice, this function would generate k-mers with substitutions for wildcards ('*').
-        return [kmer]  # Modify this as needed to generate real masked k-mers.
+        masked_kmers = set()
+        kmer_length = len(kmer)
+
+        # Generate all possible bitmasks with at most kmer_mask_length wildcards
+        for num_wildcards in range(0, mismatch_length + 1):
+            for wildcard_positions in combinations(range(kmer_length), num_wildcards):
+                masked_kmer = list(kmer)
+                for pos in wildcard_positions:
+                    masked_kmer[pos] = '*'
+                masked_kmers.add(''.join(masked_kmer))
+
+        return masked_kmers
 
     def _remove_isolated_nodes_and_edges(self):
         """

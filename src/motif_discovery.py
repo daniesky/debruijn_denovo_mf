@@ -4,7 +4,7 @@ from de_bruijn_graph import DeBruijnGraph
 from fasta_parser import FastaParser
 
 
-def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, kmer_mismatch_length = None, threshold = 0.5):
+def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, kmer_mismatch_length = None, threshold = 0.5, open_gap_penalty = 1, gap_extend_penalty = 1):
     parser = FastaParser(file, max_read)
     sequences = parser.sequences
     print(len(sequences))
@@ -13,24 +13,16 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, k
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
     # Discover motifs in the graph
-    reconstructed_seq = motif_discovery(graph, threshold)
+    reconstructed_seq = motif_discovery(graph, threshold, open_gap_penalty, gap_extend_penalty)
     for i, (seq, weight) in enumerate(reconstructed_seq):
         print(f"{i+1}. Sequence: {seq}, Total Weight: {weight/len(seq)}")
 
 
     # Count the occurrences of the motifs in the sequences
     motif_counts = count_occurances(sequences, reconstructed_seq)
-    # Sorting the motifs by count (descending order)
-    # Sort motifs by score: (Occurrences * Length of motif)
-    sorted_motifs = sorted(motif_counts.items(), key=lambda x: x[1] * len(x[0]), reverse=True)
-
-    # Print the sorted motifs with the custom score
-    for motif, count in sorted_motifs:
-        print(f"Motif: {motif}, Count: {count}, Length: {len(motif)}, Score: {count * len(motif)}")
-
     return motif_counts
 
-def motif_discovery(graph, threshold):
+def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
 
     visited_edges = set()
     reconstructed_seq = []
@@ -53,13 +45,31 @@ def motif_discovery(graph, threshold):
         accumulated_weight = 0
         
         node = root_node
+        last_char = root_node[-1]  # Track last character for gap extension bonus
+    
         while True:
             # Get the highest-weight outgoing edge
-            neighbors = [(neighbor, graph[node][neighbor]['weight']) for neighbor in graph.successors(node) if (node, neighbor) not in visited_edges]
+            # Get unvisited outgoing edges
+            neighbors = [(neighbor, graph[node][neighbor]['weight']) 
+                         for neighbor in graph.successors(node) if (node, neighbor) not in visited_edges]
             
             if not neighbors:
                 break  # Stop when no unvisited edges remain
             
+            # Apply penalties and bonuses
+            adjusted_neighbors = []
+            for neighbor, edge_weight in neighbors:
+                is_gap_edge = '*' in neighbor
+                is_extending_gap = last_char == '*' and neighbor[0] == '*'
+
+                # Apply penalties or bonuses
+                if is_gap_edge and not is_extending_gap:
+                    edge_weight /= open_gap_penalty  # Opening a gap is penalized
+                elif is_extending_gap:
+                    edge_weight *= gap_extend_penalty  # Extending a gap is encouraged
+
+                adjusted_neighbors.append((neighbor, edge_weight))
+
             # Select the highest-weight edge
             next_node, edge_weight = max(neighbors, key=lambda x: x[1])
             visited_edges.add((node, next_node))  # Mark edge as visited
