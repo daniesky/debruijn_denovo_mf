@@ -7,15 +7,15 @@ from fasta_parser import FastaParser
 def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, kmer_mismatch_length = None, threshold = 0.5, open_gap_penalty = 1, gap_extend_penalty = 1):
     parser = FastaParser(file, max_read)
     sequences = parser.sequences
-    print(len(sequences))
+
     # Construct the De Bruijn graph
-    graph = DeBruijnGraph(sequences, k=k, allow_gaps=allow_gaps, kmer_mismatch_length=kmer_mismatch_length).graph
+    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=allow_gaps, kmer_mismatch_length=kmer_mismatch_length)
+    graph = graph_obj.graph
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
+
     # Discover motifs in the graph
     reconstructed_seq = motif_discovery(graph, threshold, open_gap_penalty, gap_extend_penalty)
-    for i, (seq, weight) in enumerate(reconstructed_seq):
-        print(f"{i+1}. Sequence: {seq}, Total Weight: {weight/len(seq)}")
 
 
     # Count the occurrences of the motifs in the sequences
@@ -70,8 +70,9 @@ def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
 
                 adjusted_neighbors.append((neighbor, edge_weight))
 
+
             # Select the highest-weight edge
-            next_node, edge_weight = max(neighbors, key=lambda x: x[1])
+            next_node, edge_weight = max(adjusted_neighbors, key=lambda x: x[1])
             visited_edges.add((node, next_node))  # Mark edge as visited
             if edge_weight < threshold:
                 break
