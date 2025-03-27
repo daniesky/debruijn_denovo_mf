@@ -10,18 +10,20 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, k
     sequences = parser.sequences
 
     # Construct the De Bruijn graph
-    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=allow_gaps, kmer_mismatch_length=kmer_mismatch_length)
+    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=False, kmer_mismatch_length=kmer_mismatch_length)
     graph = graph_obj.graph
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
 
     # Discover motifs in the graph
-    reconstructed_seq = iuapac_motif_discovery(graph, threshold)
-
+    if not allow_gaps:
+        reconstructed_seq = motif_discovery(graph, threshold, open_gap_penalty, gap_extend_penalty)
+    else:
+        reconstructed_seq = iuapac_motif_discovery(graph, threshold)
     # Count the occurrences of the motifs in the sequences
-    motif_counts = count_occurances(sequences, reconstructed_seq)
+    #motif_counts = count_occurances(sequences, reconstructed_seq)
 
-    return motif_counts
+    return reconstructed_seq
 
 def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
 
@@ -108,51 +110,31 @@ IUPAC_CODES = {
     frozenset(["A", "C", "G", "T"]): "N",
 }
 
-def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.6):
+def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.9, weight_reduction_factor=0.5):
 
-    visited_edges = set()
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
     threshold = max_weight * threshold
 
     while True:
-        # Find all unvisited edges
-        unvisited_edges = [(u, v, d) for u, v, d in graph.edges(data=True) if (u, v) not in visited_edges]
-        
-        if not unvisited_edges:  # Stop if all edges have been visited
-            break
-
         # Get the max-weight edge from unvisited edges
-        max_edge = max(unvisited_edges, key=lambda x: x[2]['weight'])
+        max_edge = max(graph.edges(data=True), key=lambda x: x[2]['weight'])
         if max_edge[2]['weight'] < threshold:
             break
-        root_node = max_edge[0]
-        seq = root_node  # Start the sequence from the source of the max edge
+        node = max_edge[0]
+        seq = node  # Start the sequence from the source of the max edge
         accumulated_weight = 0
-        node = root_node
         
         while True:
             # Get unvisited outgoing edges
             neighbors = [(neighbor, graph[node][neighbor]['weight']) 
-                         for neighbor in graph.successors(node) if (node, neighbor) not in visited_edges]
+                         for neighbor in graph.successors(node) if (node, neighbor)]
             
             if not neighbors:
                 break  # Stop when no unvisited edges remain
 
 
             base_weight_map = defaultdict(float)
-            # No edges should have the same end nucleotide
-
-            seen_nucleotides = set()
-            seen_nucleotides = set()
-
-            for neighbor, weight in neighbors:
-                end_nucleotide = neighbor[-1]  # The last character of the neighbor
-                if end_nucleotide in seen_nucleotides:
-                    # If the nucleotide has already been seen, break or handle accordingly
-                    raise ValueError(f"Duplicate end nucleotide found: {end_nucleotide}")                    # Optionally, continue or break depending on your logic
-                seen_nucleotides.add(end_nucleotide)
-    
             for neighbor, weight in neighbors:
                 base_weight_map[neighbor[-1]] = weight  # Sum weights for each nucleotide
                 
@@ -180,11 +162,14 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.6):
                         break
             
             
-            for neighbor, _ in neighbors:
-                visited_edges.add((node, neighbor))
             # Use IUPAC encoding if multiple bases are valid
             if not valid_bases:
                 break
+
+            # Reduce the weight of the traversed edge after visiting it
+            for neighbor in neighbors:
+                if neighbor[0][-1] in valid_bases:
+                    graph[node][neighbor[0]]['weight'] *= weight_reduction_factor
             # Select the next node based on max edge weight among valid bases
             next_node = max((neighbor for neighbor, _ in neighbors if neighbor[-1] in valid_bases),
                             key=lambda x: graph[node][x]['weight'])
@@ -207,57 +192,27 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.6):
 
 
 # Reverse lookup from nucleotide set to IUPAC code
-IUPAC_LOOKUP = {value: key for key, value in IUPAC_CODES.items()}
+IUPAC_MAP = {value: key for key, value in IUPAC_CODES.items()}
 
 def expand_iupac(motifs):
     """Expands a sequence with IUPAC codes into all possible combinations of ACGT."""
-    """Expands a sequence with IUPAC codes into all possible combinations of ACGT."""
-    expanded = []
-    
-    # Define mapping from IUPAC codes to possible nucleotides
-    iupac_map = {
-        'A': ['A'],
-        'C': ['C'],
-        'G': ['G'],
-        'T': ['T'],
-        'R': ['A', 'G'],
-        'Y': ['C', 'T'],
-        'S': ['G', 'C'],
-        'W': ['A', 'T'],
-        'K': ['G', 'T'],
-        'M': ['A', 'C'],
-        'B': ['C', 'G', 'T'],
-        'D': ['A', 'G', 'T'],
-        'H': ['A', 'C', 'T'],
-        'V': ['A', 'C', 'G'],
-        'N': ['A', 'C', 'G', 'T']
-    }
     
     # Go through each motif
     for motif, _ in motifs:
         # Create a list of nucleotide sets for each character in the motif
-        nucleotide_sets = []
+        nucleotide_sets = [IUPAC_MAP.get(base, [base]) for base in motif]
         
-        for base in motif:
-            if base in iupac_map:
-                nucleotide_sets.append(iupac_map[base])  # Add the nucleotide set for IUPAC codes
-            else:
-                nucleotide_sets.append([base])  # If it's a single base, use it as is
-        
-        # Generate all combinations using product (cartesian product)
-        expanded_motifs = [''.join(comb) for comb in product(*nucleotide_sets)]
-        
-        # Add the expanded motifs to the result
-        expanded.extend(expanded_motifs)
-    return expanded
+        # Generate and yield each expanded motif on the fly (avoiding memory overhead)
+        for comb in product(*nucleotide_sets):
+            yield ''.join(comb)
 
 def count_occurances(sequences, motifs):
     motif_counts = Counter()  # To hold the counts of original motifs
     
     # Step 1: Generate the expanded motifs
     expanded_motifs = {}
-    for motif in motifs:
-        expanded_motifs[motif] = expand_iupac([motif])  # Create expanded motifs for each original motif
+    for motif,_ in motifs:
+        expanded_motifs[motif] = list(expand_iupac([(motif, None)]))  # Create expanded motifs for each original motif
     
     # Step 2: Iterate through the sequences and check for matches
     for seq in sequences:

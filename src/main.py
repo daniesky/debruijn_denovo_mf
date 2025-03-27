@@ -20,8 +20,11 @@ def main():
     args = parse_arguments()
 
     # Set k-mer length and FASTA file
-    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, open_gap_penalty = 5, gap_extend_penalty = 1, threshold=0.6)
-    score_motifs(0.5, 2.5, motif_counts)
+    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, open_gap_penalty = 5, gap_extend_penalty = 1, threshold=0.3, apply_hamming_distance=True)
+    for key, value in motif_counts:
+        print(key, value)
+    
+    #score_motifs(0.5, 2.5, motif_counts)
 
 
 if __name__ == "__main__":

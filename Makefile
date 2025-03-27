@@ -54,12 +54,12 @@ endif
 
 # Default FASTA file and parameters
 FASTA_FILE = data/output.fa
-LIMIT = 10_000
+LIMIT = 10000
 K = 5
 SCRIPT = src/main.py
 
 # Target to run the algorithm with parameters
 run:
-	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K)
+	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K) --gaps True
 
 
