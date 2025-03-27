@@ -10,7 +10,7 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, t
     sequences = parser.sequences
 
     # Construct the De Bruijn graph
-    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=False)
+    graph_obj = DeBruijnGraph(sequences, k=k)
     graph = graph_obj.graph
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
@@ -129,14 +129,18 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
     threshold = max_weight * threshold
 
     while True:
-        # Get the max-weight edge from unvisited edges
-        max_edge = max(graph.edges(data=True), key=lambda x: x[2]['weight'])
-        if max_edge[2]['weight'] < threshold:
+        edge = max(graph.edges(data=True), key=lambda x: x[2]['weight'])
+        node = backtrack_path(graph, edge[0], threshold)
+        edge = max(
+                ((neighbor, graph[node][neighbor]['weight']) for neighbor in graph.successors(node)),
+                key=lambda x: x[1]
+            )
+        edge_weight = edge[1]
+        if edge_weight < threshold:
             break
-        node = max_edge[0]
-        seq = node  # Start the sequence from the source of the max edge
+        seq = node
         accumulated_weight = 0
-        previous_positions = None
+        previous_positions = None    
         
         while True:
             # Get unvisited outgoing edges
@@ -164,11 +168,11 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
                     total_weight += weight
                     positions.extend(graph[node][base]['occurances'])
                     candidate_bases.add(base)
-                    if total_weight >= threshold and position_set_overlap(previous_positions, positions) > total_weight*0.3:
+                    if total_weight >= threshold*1.25 and position_set_overlap(previous_positions, positions) > total_weight*0.3:
                         # Check similarity condition
                         min_weight = min(base_weight_map[b] for b in candidate_bases)
                         max_weight = max(base_weight_map[b] for b in candidate_bases)
-                        similarity_ratio = min_weight / max_weight if max_weight > 0 else 1
+                        similarity_ratio = min_weight / max_weight if max_weight > 0 else -1
 
                         if similarity_ratio >= similarity_threshold:
                             valid_neighbors = candidate_bases

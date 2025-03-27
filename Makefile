@@ -60,5 +60,5 @@ SCRIPT = src/main.py
 
 # Target to run the algorithm with parameters
 run:
-	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K)
+	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K) --gaps True
 

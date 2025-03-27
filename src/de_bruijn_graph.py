@@ -2,19 +2,16 @@ import networkx as nx
 from matplotlib import pyplot as plt
 from itertools import combinations
 class DeBruijnGraph:
-    def __init__(self, sequences, k, allow_gaps=False, kmer_mismatch_length=None):
+    def __init__(self, sequences, k):
         """
-        Initializes the DeBruijnGraph object with sequences, k-mer length, and a flag for allowing gaps.
+        Initializes the DeBruijnGraph object with sequences, k-mer length
         
         Parameters:
         - sequences: A list of DNA sequences (strings).
         - k: The length of the k-mers for constructing the De Bruijn graph.
-        - allow_gaps: A boolean flag indicating whether gaps should be allowed.
-        - kmer_mismatch_length: The number of mismatches allowed in the gapped k-mers (only used if allow_gaps=True).
         """
         self.sequences = sequences
         self.k = k
-        self.allow_gaps = allow_gaps
         self.graph = nx.DiGraph()
 
         self.build_graph()
@@ -22,23 +19,20 @@ class DeBruijnGraph:
     def build_graph(self):
         """
         Builds the De Bruijn graph (regular or gapped) based on the provided DNA sequences.
-        Adjusts edge weights based on the occurrence of k-mers and applies a gap penalty if needed.
         
         Returns:
         - graph: The NetworkX DiGraph object representing the De Bruijn graph.
         """
-        print(self.allow_gaps)
         for seq_index, dna_sequence in enumerate(self.sequences):
             for i in range(len(dna_sequence) - self.k + 1):
                 k_mer_start = dna_sequence[i:i + self.k - 1]
                 k_mer_end = dna_sequence[i + 1:i + self.k]
                 if not self.kmer_filter(dna_sequence[i:i + self.k]):
                     continue
-                    # Regular De Bruijn graph construction without gaps
+
                 self._add_or_increment_edge(k_mer_start, k_mer_end, seq_index, i)
 
         self._remove_isolated_nodes_and_edges()
-        self._apply_gap_penalty()
 
         return self.graph
 
@@ -79,15 +73,6 @@ class DeBruijnGraph:
         self.graph.remove_nodes_from(nodes_to_remove)
         edges_to_remove = [(u, v) for u, v in self.graph.edges() if self.graph[u][v]['weight'] == 0]
         self.graph.remove_edges_from(edges_to_remove)
-
-    def _apply_gap_penalty(self):
-        """
-        Applies a gap penalty to all edges with wildcards in them by reducing their weight by half.
-        """
-        if self.allow_gaps:
-            for u, v, data in self.graph.edges(data=True):
-                if '*' in u or '*' in v:
-                    data['weight'] *= 0.5
 
 
     def draw_graph(self):
