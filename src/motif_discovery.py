@@ -22,49 +22,44 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, t
     return reconstructed_seq
 
 def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
-    visited_edges = set()
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
     threshold = max_weight * threshold
 
     while True:
-        # Find all unvisited edges
-        unvisited_edges = [(u, v, d) for u, v, d in graph.edges(data=True) if (u, v) not in visited_edges]
-        
-        if not unvisited_edges:  # Stop if all edges have been visited
-            break
-
         # Get the max-weight edge from unvisited edges
-        max_edge = max(unvisited_edges, key=lambda x: x[2]['weight'])
-        if max_edge[2]['weight'] < threshold:
+        edge = max(graph.edges(data=True), key=lambda x: x[2]['weight'])
+        node = backtrack_path(graph, edge[0], threshold)
+        edge = max(
+                ((neighbor, graph[node][neighbor]['weight']) for neighbor in graph.successors(node)),
+                key=lambda x: x[1]
+            )
+        edge_weight = edge[1]
+        if edge_weight < threshold:
             break
-        root_node = max_edge[0]
-        seq = root_node  # Start the sequence from the source of the max edge
+        seq = node
         accumulated_weight = 0
-        node = root_node
 
         previous_positions = None    
         while True:
-            # Get the highest-weight outgoing edge
-            neighbors = [(neighbor, graph[node][neighbor]['weight']) 
-                         for neighbor in graph.successors(node) if (node, neighbor) not in visited_edges]
-            
-            if not neighbors:
-                break  # Stop when no unvisited edges remain
-
-
             # Select the highest-weight edge
-            next_node, edge_weight = max(neighbors, key=lambda x: x[1])
+            next_node, edge_weight = max(
+                ((neighbor, graph[node][neighbor]['weight']) for neighbor in graph.successors(node)),
+                key=lambda x: x[1]
+            )
 
-            #Now we want to check if this edge has an actual overlap with the previous edge. If it does not, we do not want to keep traversing.
-            overlap_count = 0
+            # Compute the overlap between occurances in the previous and current edge. There needs to be a given overlap for traversal to continue
+            overlap_count = -1
             if previous_positions:
                 overlap_count = position_set_overlap(previous_positions, graph[node][next_node]['occurances'])
 
-            visited_edges.add((node, next_node))  # Mark edge as visited
+            # Reduce the weight of the traversed edge after visiting it
             graph[node][next_node]['weight'] *= weight_reduction_factor
-            if edge_weight < threshold or (overlap_count != 0 and overlap_count < edge_weight*0.3):
+
+            # Check if the edge weight is below the threshold or the overlap is too low to continue
+            if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*0.35):
                 break
+
             accumulated_weight += edge_weight
             seq += next_node[-1]  # Add last character of the next node
             previous_positions = graph[node][next_node]['occurances']
@@ -79,7 +74,36 @@ def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
 
     return reconstructed_seq
 
+def backtrack_path(graph, node, threshold):
+    """
+    Backtrack the path from the given node in the graph until the edge weight falls below the threshold.
+    """
+    previous_positions = None
+    visited_nodes = set()
+    visited_nodes.add(node)
 
+    while True:
+        if not list(graph.predecessors(node)):
+            return node
+        # Select the highest-weight edge
+        next_node, edge_weight = max(
+            ((neighbor, graph[neighbor][node]['weight']) for neighbor in graph.predecessors(node) if neighbor not in visited_nodes),
+            key=lambda x: x[1]
+        )
+        if not next_node:
+            return node
+        
+        # Compute the overlap between occurances in the previous and current edge. There needs to be a given overlap for traversal to continue
+        overlap_count = -1
+        if previous_positions:
+            overlap_count = position_set_overlap(previous_positions, graph[next_node][node]['occurances'] )
+
+        # Check if the edge weight is below the threshold or the overlap is too low to continue
+        if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*0.40):
+            return node
+        visited_nodes.add(next_node)
+        previous_positions = graph[next_node][node]['occurances']
+        node = next_node  # Move to the next node
 IUPAC_CODES = {
     frozenset(["A"]): "A",
     frozenset(["C"]): "C",
