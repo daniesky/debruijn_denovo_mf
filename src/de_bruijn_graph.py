@@ -47,14 +47,14 @@ class DeBruijnGraph:
                         self._add_or_increment_edge(k_mer_start, k_mer_end)
                 else:
                     # Regular De Bruijn graph construction without gaps
-                    self._add_or_increment_edge(k_mer_start, k_mer_end)
+                    self._add_or_increment_edge(k_mer_start, k_mer_end, seq_index, i)
 
         self._remove_isolated_nodes_and_edges()
         self._apply_gap_penalty()
 
         return self.graph
 
-    def _add_or_increment_edge(self, k_mer_start, k_mer_end):
+    def _add_or_increment_edge(self, k_mer_start, k_mer_end, seq_index, i):
         """
         Helper function to add an edge to the graph or increment its weight.
         
@@ -64,8 +64,11 @@ class DeBruijnGraph:
         """
         if self.graph.has_edge(k_mer_start, k_mer_end):
             self.graph[k_mer_start][k_mer_end]['weight'] += 1
+            self.graph[k_mer_start][k_mer_end]['occurances'].append((seq_index, i))
         else:
             self.graph.add_edge(k_mer_start, k_mer_end, weight=1)
+            self.graph[k_mer_start][k_mer_end]['occurances'] = [(seq_index, i)]
+
 
     def kmer_filter(self, kmer):
         """

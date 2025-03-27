@@ -49,7 +49,8 @@ def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
         
         node = root_node
         last_char = root_node[-1]  # Track last character for gap extension bonus
-    
+
+        previous_positions = None    
         while True:
             # Get the highest-weight outgoing edge
             # Get unvisited outgoing edges
@@ -76,11 +77,18 @@ def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
 
             # Select the highest-weight edge
             next_node, edge_weight = max(adjusted_neighbors, key=lambda x: x[1])
+
+            #Now we want to check if this edge has an actual overlap with the previous edge. If it does not, we do not want to keep traversing.
+            overlap_count = 0
+            if previous_positions:
+                shifted_prev = {(seq, pos+1) for seq, pos in previous_positions}
+                overlap_count = sum(1 for seq, pos in graph[node][next_node]['occurances'] if (seq, pos) in shifted_prev)
             visited_edges.add((node, next_node))  # Mark edge as visited
-            if edge_weight < threshold:
+            if edge_weight < threshold or (overlap_count != 0 and overlap_count < graph[node][next_node]['weight']*0.3):
                 break
             accumulated_weight += edge_weight
             seq += next_node[-1]  # Add last character of the next node
+            previous_positions = graph[node][next_node]['occurances']
             node = next_node  # Move to the next node
 
         # Store the sequence and its weight
