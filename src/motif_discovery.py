@@ -5,28 +5,23 @@ from fasta_parser import FastaParser
 from itertools import product
 
 
-def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, kmer_mismatch_length = None, threshold = 0.5, open_gap_penalty = 1, gap_extend_penalty = 1):
+def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5):
     parser = FastaParser(file, max_read)
     sequences = parser.sequences
 
     # Construct the De Bruijn graph
-    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=False, kmer_mismatch_length=kmer_mismatch_length)
+    graph_obj = DeBruijnGraph(sequences, k=k, allow_gaps=False)
     graph = graph_obj.graph
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
-
-    # Discover motifs in the graph
     if not allow_gaps:
-        reconstructed_seq = motif_discovery(graph, threshold, open_gap_penalty, gap_extend_penalty)
+        reconstructed_seq = motif_discovery(graph, threshold)
     else:
         reconstructed_seq = iuapac_motif_discovery(graph, threshold)
-    # Count the occurrences of the motifs in the sequences
-    #motif_counts = count_occurances(sequences, reconstructed_seq)
 
     return reconstructed_seq
 
-def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
-
+def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
     visited_edges = set()
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
@@ -46,45 +41,29 @@ def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
         root_node = max_edge[0]
         seq = root_node  # Start the sequence from the source of the max edge
         accumulated_weight = 0
-        
         node = root_node
-        last_char = root_node[-1]  # Track last character for gap extension bonus
 
         previous_positions = None    
         while True:
             # Get the highest-weight outgoing edge
-            # Get unvisited outgoing edges
             neighbors = [(neighbor, graph[node][neighbor]['weight']) 
                          for neighbor in graph.successors(node) if (node, neighbor) not in visited_edges]
             
             if not neighbors:
                 break  # Stop when no unvisited edges remain
-            
-            # Apply penalties and bonuses
-            adjusted_neighbors = []
-            for neighbor, edge_weight in neighbors:
-                is_gap_edge = '*' in neighbor
-                is_extending_gap = last_char == '*' and neighbor[0] == '*'
-
-                # Apply penalties or bonuses
-                if is_gap_edge and not is_extending_gap:
-                    edge_weight /= open_gap_penalty  # Opening a gap is penalized
-                elif is_extending_gap:
-                    edge_weight *= gap_extend_penalty  # Extending a gap is encouraged
-
-                adjusted_neighbors.append((neighbor, edge_weight))
 
 
             # Select the highest-weight edge
-            next_node, edge_weight = max(adjusted_neighbors, key=lambda x: x[1])
+            next_node, edge_weight = max(neighbors, key=lambda x: x[1])
 
             #Now we want to check if this edge has an actual overlap with the previous edge. If it does not, we do not want to keep traversing.
             overlap_count = 0
             if previous_positions:
-                shifted_prev = {(seq, pos+1) for seq, pos in previous_positions}
-                overlap_count = sum(1 for seq, pos in graph[node][next_node]['occurances'] if (seq, pos) in shifted_prev)
+                overlap_count = position_set_overlap(previous_positions, graph[node][next_node]['occurances'])
+
             visited_edges.add((node, next_node))  # Mark edge as visited
-            if edge_weight < threshold or (overlap_count != 0 and overlap_count < graph[node][next_node]['weight']*0.3):
+            graph[node][next_node]['weight'] *= weight_reduction_factor
+            if edge_weight < threshold or (overlap_count != 0 and overlap_count < edge_weight*0.3):
                 break
             accumulated_weight += edge_weight
             seq += next_node[-1]  # Add last character of the next node
@@ -94,8 +73,9 @@ def motif_discovery(graph, threshold, open_gap_penalty=1, gap_extend_penalty=1):
         # Store the sequence and its weight
         reconstructed_seq.append((seq, accumulated_weight))
 
-    # Sort sequences based on accumulated weight per nucleotide in descending order
+    # Sort sequences based on accumulated weight per nucleotide in descending order keeping only the top 20
     reconstructed_seq.sort(key=lambda x: x[1] / len(x[0]), reverse=True)
+    reconstructed_seq = reconstructed_seq[:20]
 
     return reconstructed_seq
 
@@ -118,7 +98,7 @@ IUPAC_CODES = {
     frozenset(["A", "C", "G", "T"]): "N",
 }
 
-def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.9, weight_reduction_factor=0.5):
+def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_reduction_factor=0.5):
 
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
@@ -132,6 +112,7 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.9, weight_re
         node = max_edge[0]
         seq = node  # Start the sequence from the source of the max edge
         accumulated_weight = 0
+        previous_positions = None
         
         while True:
             # Get unvisited outgoing edges
@@ -144,45 +125,46 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.9, weight_re
 
             base_weight_map = defaultdict(float)
             for neighbor, weight in neighbors:
-                base_weight_map[neighbor[-1]] = weight  # Sum weights for each nucleotide
-                
-
-            # Check if any individual base passes the threshold
-            valid_bases = {base for base, weight in base_weight_map.items() if weight >= threshold}
-
+                base_weight_map[neighbor] = weight  # Sum weights for each nucleotide
+            if previous_positions:
+                valid_neighbors = {base for base, weight in base_weight_map.items() if weight >= threshold and position_set_overlap(previous_positions, graph[node][base]['occurances']) > weight*0.3}
+            else:
+                valid_neighbors = {base for base, weight in base_weight_map.items() if weight >= threshold}
             # Check if any IUPAC code passes the threshold
-            if not valid_bases:
+            if not valid_neighbors:
                 sorted_bases = sorted(base_weight_map.items(), key=lambda x: x[1], reverse=True)
                 total_weight = 0
                 candidate_bases = set()
-
+                positions = list()
                 for base, weight in sorted_bases:
                     total_weight += weight
+                    positions.extend(graph[node][base]['occurances'])
                     candidate_bases.add(base)
-                    if total_weight >= threshold:
+                    if total_weight >= threshold and position_set_overlap(previous_positions, positions) > total_weight*0.3:
                         # Check similarity condition
                         min_weight = min(base_weight_map[b] for b in candidate_bases)
                         max_weight = max(base_weight_map[b] for b in candidate_bases)
                         similarity_ratio = min_weight / max_weight if max_weight > 0 else 1
 
                         if similarity_ratio >= similarity_threshold:
-                            valid_bases = candidate_bases
+                            valid_neighbors = candidate_bases
+
                         break
             
             
             # Use IUPAC encoding if multiple bases are valid
-            if not valid_bases:
+            if not valid_neighbors:
                 break
 
             # Reduce the weight of the traversed edge after visiting it
-            for neighbor in neighbors:
-                if neighbor[0][-1] in valid_bases:
-                    graph[node][neighbor[0]]['weight'] *= weight_reduction_factor
+            for neighbor in valid_neighbors:
+                    graph[node][neighbor]['weight'] *= weight_reduction_factor
             # Select the next node based on max edge weight among valid bases
-            next_node = max((neighbor for neighbor, _ in neighbors if neighbor[-1] in valid_bases),
+            next_node = max(valid_neighbors,
                             key=lambda x: graph[node][x]['weight'])
-            
-            iupac_code = IUPAC_CODES[frozenset(valid_bases)] if len(valid_bases) > 1 else next(iter(valid_bases))
+            previous_positions = graph[node][next_node]['occurances']
+            valid_neighbor_bases = {seq[-1] for seq in valid_neighbors}
+            iupac_code = IUPAC_CODES[frozenset(valid_neighbor_bases)] if len(valid_neighbor_bases) > 1 else next(iter(valid_neighbor_bases))
             seq += iupac_code  # Add to sequence
 
             accumulated_weight += graph[node][next_node]['weight']
@@ -232,6 +214,11 @@ def count_occurances(sequences, motifs):
                     break  # Break after the first match to avoid double counting lines
     
     return motif_counts
+
+
+def position_set_overlap(set1, set2):
+    shifted_prev = {(seq, pos+1) for seq, pos in set1}
+    return sum(1 for seq, pos in set2 if (seq, pos) in shifted_prev)
 
 def hamming_distance(kmer1, kmer2):
     """Calculate the Hamming distance between two k-mers."""

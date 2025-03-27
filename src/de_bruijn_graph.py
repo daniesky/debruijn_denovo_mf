@@ -15,7 +15,6 @@ class DeBruijnGraph:
         self.sequences = sequences
         self.k = k
         self.allow_gaps = allow_gaps
-        self.kmer_mismatch_length = kmer_mismatch_length if kmer_mismatch_length is not None else k // 2
         self.graph = nx.DiGraph()
 
         self.build_graph()
@@ -29,25 +28,14 @@ class DeBruijnGraph:
         - graph: The NetworkX DiGraph object representing the De Bruijn graph.
         """
         print(self.allow_gaps)
-        print(self.kmer_mismatch_length)
         for seq_index, dna_sequence in enumerate(self.sequences):
             for i in range(len(dna_sequence) - self.k + 1):
                 k_mer_start = dna_sequence[i:i + self.k - 1]
                 k_mer_end = dna_sequence[i + 1:i + self.k]
                 if not self.kmer_filter(dna_sequence[i:i + self.k]):
                     continue
-
-                if self.allow_gaps:
-                    # Use masked k-mers with allowed mismatches if gaps are allowed
-                    kmer = dna_sequence[i:i + self.k]
-                    masked_kmers = self.get_masked_kmers(kmer, self.kmer_mismatch_length)
-                    for masked_kmer in masked_kmers:
-                        k_mer_start = masked_kmer[:self.k - 1]
-                        k_mer_end = masked_kmer[1:]
-                        self._add_or_increment_edge(k_mer_start, k_mer_end)
-                else:
                     # Regular De Bruijn graph construction without gaps
-                    self._add_or_increment_edge(k_mer_start, k_mer_end, seq_index, i)
+                self._add_or_increment_edge(k_mer_start, k_mer_end, seq_index, i)
 
         self._remove_isolated_nodes_and_edges()
         self._apply_gap_penalty()
@@ -82,30 +70,6 @@ class DeBruijnGraph:
         """
         # Example filter: Only allow k-mers that consist of A, T, G, C (this could be customized)
         return all(base in 'ATGC' for base in kmer)
-
-    def get_masked_kmers(self, kmer, mismatch_length):
-        """
-        Generates masked k-mers with up to `mismatch_length` mismatches in the original k-mer.
-        
-        Parameters:
-        - kmer: The k-mer string to be masked.
-        - mismatch_length: The number of allowed mismatches in the masked k-mers.
-        
-        Returns:
-        - list: A list of masked k-mers.
-        """
-        masked_kmers = set()
-        kmer_length = len(kmer)
-
-        # Generate all possible bitmasks with at most kmer_mask_length wildcards
-        for num_wildcards in range(0, mismatch_length + 1):
-            for wildcard_positions in combinations(range(kmer_length), num_wildcards):
-                masked_kmer = list(kmer)
-                for pos in wildcard_positions:
-                    masked_kmer[pos] = '*'
-                masked_kmers.add(''.join(masked_kmer))
-
-        return masked_kmers
 
     def _remove_isolated_nodes_and_edges(self):
         """
