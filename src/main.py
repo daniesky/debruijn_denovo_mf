@@ -1,8 +1,5 @@
 import argparse
-import re
-from collections import Counter
 from motif_discovery import find_motifs
-from result_analysis import score_motifs
 
 def parse_arguments():
     """
@@ -18,11 +15,11 @@ def parse_arguments():
 def main():
     # Parse command-line arguments
     args = parse_arguments()
-
     # Set k-mer length and FASTA file
-    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, threshold=0.2, apply_hamming_distance=False)
-    for key, value in motif_counts:
-        print(key, value)
+    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, threshold=0.3, apply_hamming_distance=False)
+    for key, value, _ in motif_counts:
+        print(key, value, value/len(key))
+
     
     #score_motifs(0.5, 2.5, motif_counts)
 

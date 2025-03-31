@@ -1,11 +1,11 @@
 from collections import Counter, defaultdict
-import re
 from de_bruijn_graph import DeBruijnGraph
 from fasta_parser import FastaParser
 from itertools import product
+from result_analysis import motif_logo
 
 
-def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5):
+def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5, overlap_factor = 0.4):
     parser = FastaParser(file, max_read)
     sequences = parser.sequences
 
@@ -15,13 +15,18 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, t
     if apply_hamming_distance:
         apply_hamming_reward_after_creation(graph)
     if not allow_gaps:
-        reconstructed_seq = motif_discovery(graph, threshold)
+        reconstructed_seq = strict_motif_discovery(graph, threshold, overlap_factor=overlap_factor)
     else:
-        reconstructed_seq = iuapac_motif_discovery(graph, threshold)
+        reconstructed_seq = ambig_motif_discovery(graph, threshold, overlap_factor=overlap_factor)
+
+    for motif, _, path in reconstructed_seq[:10]:
+        # Create a logo for each sequence
+        motif_logo(motif, sequences, graph[path[0]][path[1]]['occurances'])
+        print(f"Logo created for sequence: {motif}")
 
     return reconstructed_seq
 
-def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
+def strict_motif_discovery(graph, threshold, weight_reduction_factor=0.5, overlap_factor=0.3):
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
     threshold = max_weight * threshold
@@ -39,6 +44,7 @@ def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
             break
         seq = node
         accumulated_weight = 0
+        traversed_nodes = [node]
 
         previous_positions = None    
         while True:
@@ -57,16 +63,17 @@ def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
             graph[node][next_node]['weight'] *= weight_reduction_factor
 
             # Check if the edge weight is below the threshold or the overlap is too low to continue
-            if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*0.35):
+            if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*overlap_factor):
                 break
 
             accumulated_weight += edge_weight
             seq += next_node[-1]  # Add last character of the next node
             previous_positions = graph[node][next_node]['occurances']
+            traversed_nodes.append(next_node)  # Keep track of traversed nodes
             node = next_node  # Move to the next node
 
         # Store the sequence and its weight
-        reconstructed_seq.append((seq, accumulated_weight))
+        reconstructed_seq.append((seq, accumulated_weight, traversed_nodes))
 
     # Sort sequences based on accumulated weight per nucleotide in descending order keeping only the top 20
     reconstructed_seq.sort(key=lambda x: x[1] / len(x[0]), reverse=True)
@@ -74,7 +81,7 @@ def motif_discovery(graph, threshold, weight_reduction_factor=0.5):
 
     return reconstructed_seq
 
-def backtrack_path(graph, node, threshold):
+def backtrack_path(graph, node, threshold, overlap_factor=0.3):
     """
     Backtrack the path from the given node in the graph until the edge weight falls below the threshold.
     """
@@ -99,7 +106,7 @@ def backtrack_path(graph, node, threshold):
             overlap_count = position_set_overlap(previous_positions, graph[next_node][node]['occurances'] )
 
         # Check if the edge weight is below the threshold or the overlap is too low to continue
-        if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*0.40):
+        if edge_weight < threshold or (overlap_count != -1 and overlap_count < edge_weight*overlap_factor):
             return node
         visited_nodes.add(next_node)
         previous_positions = graph[next_node][node]['occurances']
@@ -122,7 +129,7 @@ IUPAC_CODES = {
     frozenset(["A", "C", "G", "T"]): "N",
 }
 
-def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_reduction_factor=0.5):
+def ambig_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_reduction_factor=0.5, overlap_factor=0.3):
 
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
@@ -140,7 +147,7 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
             break
         seq = node
         accumulated_weight = 0
-        previous_positions = None    
+        edge_origin = None    
         
         while True:
             # Get unvisited outgoing edges
@@ -154,8 +161,8 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
             base_weight_map = defaultdict(float)
             for neighbor, weight in neighbors:
                 base_weight_map[neighbor] = weight  # Sum weights for each nucleotide
-            if previous_positions:
-                valid_neighbors = {base for base, weight in base_weight_map.items() if weight >= threshold and position_set_overlap(previous_positions, graph[node][base]['occurances']) > weight*0.3}
+            if edge_origin:
+                valid_neighbors = {base for base, weight in base_weight_map.items() if weight >= threshold and position_set_overlap(edge_origin, graph[node][base]['occurances']) > weight*overlap_factor}
             else:
                 valid_neighbors = {base for base, weight in base_weight_map.items() if weight >= threshold}
             # Check if any IUPAC code passes the threshold
@@ -168,7 +175,7 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
                     total_weight += weight
                     positions.extend(graph[node][base]['occurances'])
                     candidate_bases.add(base)
-                    if total_weight >= threshold*1.25 and position_set_overlap(previous_positions, positions) > total_weight*0.3:
+                    if total_weight >= threshold and position_set_overlap(edge_origin, positions) > total_weight*overlap_factor:
                         # Check similarity condition
                         min_weight = min(base_weight_map[b] for b in candidate_bases)
                         max_weight = max(base_weight_map[b] for b in candidate_bases)
@@ -190,7 +197,7 @@ def iuapac_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_r
             # Select the next node based on max edge weight among valid bases
             next_node = max(valid_neighbors,
                             key=lambda x: graph[node][x]['weight'])
-            previous_positions = graph[node][next_node]['occurances']
+            edge_origin = graph[node][next_node]['occurances']
             valid_neighbor_bases = {seq[-1] for seq in valid_neighbors}
             iupac_code = IUPAC_CODES[frozenset(valid_neighbor_bases)] if len(valid_neighbor_bases) > 1 else next(iter(valid_neighbor_bases))
             seq += iupac_code  # Add to sequence

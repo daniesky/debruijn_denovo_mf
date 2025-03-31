@@ -1,3 +1,5 @@
 networkx
 numpy
 matplotlib
+logomaker
+pandas

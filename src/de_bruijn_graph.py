@@ -27,8 +27,6 @@ class DeBruijnGraph:
             for i in range(len(dna_sequence) - self.k + 1):
                 k_mer_start = dna_sequence[i:i + self.k - 1]
                 k_mer_end = dna_sequence[i + 1:i + self.k]
-                if not self.kmer_filter(dna_sequence[i:i + self.k]):
-                    continue
 
                 self._add_or_increment_edge(k_mer_start, k_mer_end, seq_index, i)
 
