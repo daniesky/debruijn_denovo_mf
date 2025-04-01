@@ -16,12 +16,9 @@ def main():
     # Parse command-line arguments
     args = parse_arguments()
     # Set k-mer length and FASTA file
-    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, threshold=0.3, apply_hamming_distance=False)
+    motif_counts = find_motifs(file = args.fasta_file, allow_gaps = args.gaps, k= args.k, max_read = args.limit, threshold=0.3, overlap_factor=0.4, occurance_threshold = 0.0, apply_hamming_distance=True)
     for key, value, _ in motif_counts:
         print(key, value, value/len(key))
-
-    
-    #score_motifs(0.5, 2.5, motif_counts)
 
 
 if __name__ == "__main__":

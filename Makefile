@@ -27,10 +27,13 @@ else
 endif
 
 .PHONY: clean
-clean: ## Removes Virtual environment
+clean: ## Removes Virtual environment and logos
 ifeq ($(OS),Windows_NT)
 	@if exist "$(VENV_NAME)" ($(RMDIR) $(VENV_NAME))
 	@if exist "src\__pycache__" (cd src && $(RMDIR) __pycache__)
+	@if exist "logos\*.png" (del /Q logos\*.png)
+	@if exist "logos\*.jpg" (del /Q logos\*.jpg)
+	@if exist "logos\*.jpeg" (del /Q logos\*.jpeg)
 else
 	@if [ -d "$(VENV_NAME)" ]; then \
 		$(RMDIR) $(VENV_NAME); \
@@ -38,8 +41,10 @@ else
 	@if [ -d "src/__pycache__" ]; then \
 		cd src && $(RMDIR) __pycache__; \
 	fi
+	@if [ -d "logos" ]; then \
+		rm -f logos/*.png logos/*.jpg logos/*.jpeg; \
+	fi
 endif
-
 .PHONY: help
 help: ## List all available make commands
 ifeq ($(OS),Windows_NT)
@@ -60,5 +65,5 @@ SCRIPT = src/main.py
 
 # Target to run the algorithm with parameters
 run:
-	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K)
+	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K) --gaps True
 

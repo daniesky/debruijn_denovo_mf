@@ -2,10 +2,10 @@ from collections import Counter, defaultdict
 from de_bruijn_graph import DeBruijnGraph
 from fasta_parser import FastaParser
 from itertools import product
-from result_analysis import motif_logo
+from result_analysis import motif_logo_alignment_version
 
 
-def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5, overlap_factor = 0.4):
+def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5, overlap_factor = 0.3, occurance_threshold = 0.6):
     parser = FastaParser(file, max_read)
     sequences = parser.sequences
 
@@ -19,12 +19,12 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, t
     else:
         reconstructed_seq = ambig_motif_discovery(graph, threshold, overlap_factor=overlap_factor)
 
-    for motif, _, path in reconstructed_seq[:10]:
+    for motif, _, path in reconstructed_seq[:min(5, len(reconstructed_seq))]:
         # Create a logo for each sequence
-        motif_logo(motif, sequences, graph[path[0]][path[1]]['occurances'])
+        motif_logo_alignment_version(motif, sequences, occurance_threshold)
         print(f"Logo created for sequence: {motif}")
 
-    return reconstructed_seq
+    return reconstructed_seq[:min(5, len(reconstructed_seq))]
 
 def strict_motif_discovery(graph, threshold, weight_reduction_factor=0.5, overlap_factor=0.3):
     reconstructed_seq = []
@@ -147,16 +147,15 @@ def ambig_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_re
             break
         seq = node
         accumulated_weight = 0
-        edge_origin = None    
-        
+        edge_origin = None
+        traversed_nodes = [node]
         while True:
-            # Get unvisited outgoing edges
+            # Get outgoing edges
             neighbors = [(neighbor, graph[node][neighbor]['weight']) 
                          for neighbor in graph.successors(node) if (node, neighbor)]
             
             if not neighbors:
                 break  # Stop when no unvisited edges remain
-
 
             base_weight_map = defaultdict(float)
             for neighbor, weight in neighbors:
@@ -195,6 +194,7 @@ def ambig_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_re
             for neighbor in valid_neighbors:
                     graph[node][neighbor]['weight'] *= weight_reduction_factor
             # Select the next node based on max edge weight among valid bases
+
             next_node = max(valid_neighbors,
                             key=lambda x: graph[node][x]['weight'])
             edge_origin = graph[node][next_node]['occurances']
@@ -203,11 +203,11 @@ def ambig_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_re
             seq += iupac_code  # Add to sequence
 
             accumulated_weight += graph[node][next_node]['weight']
-
+            traversed_nodes.append(next_node)  # Keep track of traversed nodes
             node = next_node
 
         # Store the sequence and its weight
-        reconstructed_seq.append((seq, accumulated_weight))
+        reconstructed_seq.append((seq, accumulated_weight, traversed_nodes))
 
     # Sort sequences based on accumulated weight per nucleotide in descending order
     reconstructed_seq.sort(key=lambda x: x[1] / len(x[0]), reverse=True)
