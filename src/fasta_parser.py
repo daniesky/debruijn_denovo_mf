@@ -25,7 +25,7 @@ class FastaParser:
         
         with open(self.file_path, 'r') as f:
             for line in f:
-                if self.limit and iter >= self.limit:
+                if self.limit and iter > self.limit:
                     break  # Stop if the limit is reached
                 line = line.strip()
                 if not line:  # Skip empty lines

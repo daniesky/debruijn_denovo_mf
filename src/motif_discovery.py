@@ -2,12 +2,8 @@ from collections import Counter, defaultdict
 from de_bruijn_graph import DeBruijnGraph
 from fasta_parser import FastaParser
 from itertools import product
-from result_analysis import motif_logo_alignment_version
 
-
-def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, threshold = 0.5, overlap_factor = 0.3, occurance_threshold = 0.6):
-    parser = FastaParser(file, max_read)
-    sequences = parser.sequences
+def find_motifs(sequences, allow_gaps, k, apply_hamming_distance, threshold, overlap_factor, limit):
 
     # Construct the De Bruijn graph
     graph_obj = DeBruijnGraph(sequences, k=k)
@@ -19,12 +15,7 @@ def find_motifs(file, allow_gaps, k, max_read, apply_hamming_distance = False, t
     else:
         reconstructed_seq = ambig_motif_discovery(graph, threshold, overlap_factor=overlap_factor)
 
-    for motif, _, path in reconstructed_seq[:min(5, len(reconstructed_seq))]:
-        # Create a logo for each sequence
-        motif_logo_alignment_version(motif, sequences, occurance_threshold)
-        print(f"Logo created for sequence: {motif}")
-
-    return reconstructed_seq[:min(5, len(reconstructed_seq))]
+    return reconstructed_seq[:limit]
 
 def strict_motif_discovery(graph, threshold, weight_reduction_factor=0.5, overlap_factor=0.3):
     reconstructed_seq = []
@@ -129,7 +120,7 @@ IUPAC_CODES = {
     frozenset(["A", "C", "G", "T"]): "N",
 }
 
-def ambig_motif_discovery(graph, threshold, similarity_threshold=0.95, weight_reduction_factor=0.5, overlap_factor=0.3):
+def ambig_motif_discovery(graph, threshold, similarity_threshold=0.75, weight_reduction_factor=0.5, overlap_factor=0.3):
 
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])

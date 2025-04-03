@@ -60,10 +60,10 @@ endif
 # Default FASTA file and parameters
 FASTA_FILE = data/output.fa
 LIMIT = 10000
-K = 5
+K = 3
 SCRIPT = src/main.py
 
 # Target to run the algorithm with parameters
 run:
-	$(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K) --gaps True
+	$(ACTIVATE_VENV) && $(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K)
 
