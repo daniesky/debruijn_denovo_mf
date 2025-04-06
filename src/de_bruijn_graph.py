@@ -1,6 +1,5 @@
 import networkx as nx
 from matplotlib import pyplot as plt
-from itertools import combinations
 class DeBruijnGraph:
     def __init__(self, sequences, k):
         """
@@ -18,7 +17,7 @@ class DeBruijnGraph:
 
     def build_graph(self):
         """
-        Builds the De Bruijn graph (regular or gapped) based on the provided DNA sequences.
+        Builds the De Bruijn graph based on the provided DNA sequences.
         
         Returns:
         - graph: The NetworkX DiGraph object representing the De Bruijn graph.
@@ -48,20 +47,6 @@ class DeBruijnGraph:
         else:
             self.graph.add_edge(k_mer_start, k_mer_end, weight=1)
             self.graph[k_mer_start][k_mer_end]['occurances'] = [(seq_index, i)]
-
-
-    def kmer_filter(self, kmer):
-        """
-        Filters k-mers based on a given condition (you can modify this method for custom filtering).
-        
-        Parameters:
-        - kmer: The k-mer string to be filtered.
-        
-        Returns:
-        - bool: Whether the k-mer passes the filter condition.
-        """
-        # Example filter: Only allow k-mers that consist of A, T, G, C (this could be customized)
-        return all(base in 'ATGC' for base in kmer)
 
     def _remove_isolated_nodes_and_edges(self):
         """

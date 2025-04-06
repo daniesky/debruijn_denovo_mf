@@ -1,5 +1,4 @@
 import logomaker
-from collections import defaultdict
 import numpy as np
 import pandas as pd
 def shannon_entropy(pfm):
@@ -8,30 +7,29 @@ def shannon_entropy(pfm):
     :param pfm: Position frequency matrix (DataFrame)
     :return: Shannon entropy value
     """
-    # Normalize the PFM to get probabilities
-    pfm_normalized = pfm.div(pfm.sum(axis=1), axis=0)
-    
-    # Calculate Shannon entropy
-    entropy = (pfm_normalized * pfm_normalized.apply(lambda x: x[x > 0].apply(lambda y: y * np.log2(y)))).sum(axis=1).sum()    
-    return entropy
+    # Add a small epsilon to avoid log2(0)
+    eps = 1e-10
+    entropy_per_position = -np.sum(pfm * np.log2(pfm + eps), axis=1)
+    max_entropy = np.log2(pfm.shape[1])  # log2(4) = 2 for DNA
+    normalized_entropy = (entropy_per_position / max_entropy).sum() / pfm.shape[0]
+    return normalized_entropy
 
+def score_motif(pfm, consensus_score):
+    return (1-shannon_entropy(pfm))*(consensus_score)
 
-def score_motif(pfm, occurance_factor, k, motif_len, entropy_weight, occurance_weight, length_weight):
-    return entropy_weight * (1-shannon_entropy(pfm)) + occurance_weight * occurance_factor + length_weight * (1 - (motif_len / k))
-    
-def score_motifs(motifs, sequences, k, entropy_weight, occurance_weight, length_weight, save_logos, print_motifs, inst_limit):
+def score_motifs(motifs, sequences, save_logos, print_motifs, inst_limit):
     scored_motifs = []
     for motif, _, _ in motifs:
-        pfm, occurrences, concensus_score = compute_occurance_pfm(motif, sequences, inst_limit)
-        score = score_motif(pfm, occurrences / len(sequences), k, len(motif), entropy_weight, occurance_weight, length_weight)
-        scored_motifs.append((motif, score, pfm, concensus_score))
+        pfm, occurrences, consensus_score = compute_occurance_pfm(motif, sequences, inst_limit)
+        score = score_motif(pfm, consensus_score)
+        scored_motifs.append((motif, score, pfm, consensus_score))
     
     # Sort motifs by score
     scored_motifs.sort(key=lambda x: x[1], reverse=True)
     # Print top motifs
     print("Top motifs:")
-    for i, (motif, score, pfm, concensus_score) in enumerate(scored_motifs[:print_motifs]):
-        print(f"Motif {i+1}: {motif} (Score: {score}), Consensus Score: {concensus_score})")
+    for i, (motif, score, pfm, consensus_score) in enumerate(scored_motifs[:print_motifs]):
+        print(f"Motif {i+1}: {motif} (Score: {score}), Consensus Score: {consensus_score}")
     
     if save_logos > 0:
         print("Saving logos for top motifs...")
@@ -68,7 +66,7 @@ def compute_occurance_pfm(motif, chip_seq_data, inst_limit):
     dataframe = pd.DataFrame(0, index=range(len(motif)), columns=['A', 'C', 'G', 'T'])
     threshold = int(len(motif)*inst_limit)
     occurances  = 0
-    concensus_score = 0
+    consensus_score = 0
     for seq in chip_seq_data:
         if not seq:
             continue
@@ -76,7 +74,7 @@ def compute_occurance_pfm(motif, chip_seq_data, inst_limit):
         alignment, score = align_best_fit(seq, motif)
         if(score < threshold):
             continue
-        concensus_score += score
+        consensus_score += score
         occurances += 1
         for i in range(len(motif)):
             if seq[alignment + i] in ('A', 'C', 'G', 'T'):
@@ -89,7 +87,7 @@ def compute_occurance_pfm(motif, chip_seq_data, inst_limit):
     if not np.isfinite(dataframe.values).all():
         print("Non-finite values found in the DataFrame.")
         # Handle non-finite values (e.g., replace with 0 or NaN)
-    return dataframe, occurances, concensus_score
+    return dataframe, occurances, consensus_score
 
 
 def motif_logo_alignment_version(motif, chip_seq_data, dataframe, occurances):

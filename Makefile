@@ -58,12 +58,12 @@ else
 endif
 
 # Default FASTA file and parameters
-FASTA_FILE = data/output.fa
-LIMIT = 10000
-K = 5
+FASTA_FILE = data/test_data.fa
+LIMIT = 100000
+K = 4
 SCRIPT = src/main.py
 
 # Target to run the algorithm with parameters
 run:
-	$(ACTIVATE_VENV) && $(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K) --gaps True
+	$(ACTIVATE_VENV) && $(PYTHON) $(SCRIPT) $(FASTA_FILE) --limit $(LIMIT) --k $(K)
 

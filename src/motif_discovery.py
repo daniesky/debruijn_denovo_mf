@@ -1,10 +1,11 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from de_bruijn_graph import DeBruijnGraph
-from fasta_parser import FastaParser
 from itertools import product
 
 def find_motifs(sequences, allow_gaps, k, threshold, overlap_factor, limit):
-
+    """
+    Find motifs in the given sequences using a De Bruijn graph approach.
+    """
     # Construct the De Bruijn graph
     graph_obj = DeBruijnGraph(sequences, k=k)
     graph = graph_obj.graph
@@ -15,7 +16,11 @@ def find_motifs(sequences, allow_gaps, k, threshold, overlap_factor, limit):
 
     return reconstructed_seq[:limit]
 
-def strict_motif_discovery(graph, threshold, weight_reduction_factor=0.5, overlap_factor=0.3):
+def strict_motif_discovery(graph, threshold, overlap_factor, weight_reduction_factor = 0.5):
+    """
+    Discover motifs in the De Bruijn graph with strict graph traversal.
+    """
+
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
     threshold = max_weight * threshold
@@ -66,7 +71,6 @@ def strict_motif_discovery(graph, threshold, weight_reduction_factor=0.5, overla
 
     # Sort sequences based on accumulated weight per nucleotide in descending order keeping only the top 20
     reconstructed_seq.sort(key=lambda x: x[1] / len(x[0]), reverse=True)
-    reconstructed_seq = reconstructed_seq[:20]
 
     return reconstructed_seq
 
@@ -100,6 +104,7 @@ def backtrack_path(graph, node, threshold, overlap_factor=0.3):
         visited_nodes.add(next_node)
         previous_positions = graph[next_node][node]['occurances']
         node = next_node  # Move to the next node
+        
 IUPAC_CODES = {
     frozenset(["A"]): "A",
     frozenset(["C"]): "C",
@@ -119,7 +124,9 @@ IUPAC_CODES = {
 }
 
 def ambig_motif_discovery(graph, threshold, similarity_threshold=0.75, weight_reduction_factor=0.5, overlap_factor=0.3):
-
+    """
+    Discover motifs in the De Bruijn graph with ambiguous traversal. Can agregate multiple bases into IUPAC codes if sum of outgoing edges is above threshold.
+    """
     reconstructed_seq = []
     max_weight = max([d['weight'] for u, v, d in graph.edges(data=True)])
     threshold = max_weight * threshold
@@ -220,26 +227,9 @@ def expand_iupac(motifs):
         for comb in product(*nucleotide_sets):
             yield ''.join(comb)
 
-def count_occurances(sequences, motifs):
-    motif_counts = Counter()  # To hold the counts of original motifs
-    
-    # Step 1: Generate the expanded motifs
-    expanded_motifs = {}
-    for motif,_ in motifs:
-        expanded_motifs[motif] = list(expand_iupac([(motif, None)]))  # Create expanded motifs for each original motif
-    
-    # Step 2: Iterate through the sequences and check for matches
-    for seq in sequences:
-        for motif, expanded in expanded_motifs.items():
-            # For each expanded motif, check if it matches the sequence
-            for expanded_motif in expanded:
-                if expanded_motif in seq:  # If the expanded motif is found in the sequence
-                    motif_counts[motif] += 1  # Count it under the original motif
-                    break  # Break after the first match to avoid double counting lines
-    
-    return motif_counts
-
-
 def position_set_overlap(set1, set2):
+    """
+    Computes the overlap between two sets of positions.
+    """
     shifted_prev = {(seq, pos+1) for seq, pos in set1}
     return sum(1 for seq, pos in set2 if (seq, pos) in shifted_prev)
