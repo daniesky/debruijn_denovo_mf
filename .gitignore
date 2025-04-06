@@ -172,8 +172,3 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-
-# Ignore contents of data folder
-data/*
-
-outputs

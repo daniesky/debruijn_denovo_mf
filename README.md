@@ -1,6 +1,6 @@
 # 🧬 De Bruijn Motif Discovery
 
-This project implements a **De Bruijn graph-based algorithm** for **de novo motif discovery** in DNA sequences. It ingests sequences in FASTA format, constructs a De Bruijn graph, and discovers high-confidence motifs using edge weights, overlaps, and IUPAC encodings for ambiguous positions.
+This project implements a **De Bruijn graph-based algorithm** for **de novo motif discovery** in DNA sequences.
 
 Results include **motif scores** and optional **motif logos** for visual inspection.
 
