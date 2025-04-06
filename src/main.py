@@ -21,8 +21,8 @@ def main():
     parser = FastaParser(args.fasta_file, args.limit)
     sequences = parser.sequences
 
-    candidate_motifs = find_motifs(sequences, allow_gaps = args.gaps, k= args.k, threshold=0.3, overlap_factor=0.3, apply_hamming_distance=True, limit=10)
-    score_motifs(candidate_motifs, sequences, k=args.k, entropy_weight=1, occurance_weight=0, length_weight=0, save_logos=3, print_motifs=5)
+    candidate_motifs = find_motifs(sequences, allow_gaps = args.gaps, k= args.k, threshold=0.35, overlap_factor=0.35, limit=10)
+    score_motifs(candidate_motifs, sequences, k=args.k, entropy_weight=1, occurance_weight=0, length_weight=0, save_logos=3, print_motifs=5, inst_limit = 0.0)
 
 if __name__ == "__main__":
     main()

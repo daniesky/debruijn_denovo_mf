@@ -3,13 +3,11 @@ from de_bruijn_graph import DeBruijnGraph
 from fasta_parser import FastaParser
 from itertools import product
 
-def find_motifs(sequences, allow_gaps, k, apply_hamming_distance, threshold, overlap_factor, limit):
+def find_motifs(sequences, allow_gaps, k, threshold, overlap_factor, limit):
 
     # Construct the De Bruijn graph
     graph_obj = DeBruijnGraph(sequences, k=k)
     graph = graph_obj.graph
-    if apply_hamming_distance:
-        apply_hamming_reward_after_creation(graph)
     if not allow_gaps:
         reconstructed_seq = strict_motif_discovery(graph, threshold, overlap_factor=overlap_factor)
     else:
@@ -245,43 +243,3 @@ def count_occurances(sequences, motifs):
 def position_set_overlap(set1, set2):
     shifted_prev = {(seq, pos+1) for seq, pos in set1}
     return sum(1 for seq, pos in set2 if (seq, pos) in shifted_prev)
-
-def hamming_distance(kmer1, kmer2):
-    """Calculate the Hamming distance between two k-mers."""
-    return sum(c1 != c2 for c1, c2 in zip(kmer1, kmer2))
-
-def reward_based_on_hamming(kmer1, kmer2, max_distance=3, reward_factor=2.0):
-    """
-    Reward the edge weight based on the Hamming distance between two k-mers.
-    - max_distance: The maximum Hamming distance for a reward to be applied.
-    - reward_factor: The factor by which to increase the edge weight.
-    """
-    hamming_dist = hamming_distance(kmer1, kmer2)
-    
-    if hamming_dist == 0:
-        return reward_factor  # Identical k-mers, maximum reward
-    elif hamming_dist == 1:
-        return reward_factor * 1.5  # Small reward for one-character difference
-    elif hamming_dist <= max_distance:
-        # Gradually decrease the reward as the distance grows
-        return reward_factor * (1.0 / (1 + hamming_dist))
-    else:
-        return 0  # No reward for larger Hamming distances
-    
-def apply_hamming_reward_after_creation(graph, max_distance=3, reward_factor=2.0):
-    """
-    Apply the Hamming distance-based reward to the edge weights of the graph.
-    This function should be called after the graph has been created.
-    
-    - max_distance: The maximum Hamming distance for a reward to be applied.
-    - reward_factor: The factor by which to increase the edge weight.
-    """
-    for u, v, _ in graph.edges(data=True):
-        k_mer_start = u  # start k-mer of the edge
-        k_mer_end = v    # end k-mer of the edge
-        
-        # Apply Hamming distance-based reward to the edge weight
-        additional_weight = reward_based_on_hamming(k_mer_start, k_mer_end, max_distance, reward_factor)
-        
-        # Update the edge weight (add the reward to the existing weight)
-        graph[u][v]['weight'] += additional_weight
