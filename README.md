@@ -1,5 +1,7 @@
 # De Bruijn Motif Discovery
 Note that this software is designed for a school project and not meant to be used in any other context. 
+
+
 **De Bruijn graph-based algorithm** for **de novo motif discovery** in DNA sequences.
 
 Results include **motif scores** and optional **motif logos**. 
